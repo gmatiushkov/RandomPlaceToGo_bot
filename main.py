@@ -14,3 +14,4 @@ random_station.register_handlers_random_station(dp)
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
+
