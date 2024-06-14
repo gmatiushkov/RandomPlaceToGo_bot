@@ -12,6 +12,10 @@ start.register_handlers_start(dp)
 random_place.register_handlers_random_place(dp)
 random_station.register_handlers_random_station(dp)
 
+# Обработчик для удаления всех сообщений, если бот не находится в состоянии ожидания
+@dp.message_handler(content_types=types.ContentTypes.ANY)
+async def delete_unexpected_messages(message: types.Message):
+    await message.delete()
+
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
-

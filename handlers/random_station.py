@@ -10,7 +10,7 @@ metro_stations = {
     "🟪": ["Комендантский проспект", "Старая Деревня", "Крестовский остров", "Чкаловская", "Спортивная", "Адмиралтейская", "Садовая", "Звенигородская", "Обводный канал", "Волковская", "Бухарестская", "Международная", "Проспект Славы", "Дунайская", "Шушары"],
 }
 
-all_stations = [station for stations in metro_stations.values() for station in stations]
+all_stations = [(station, color) for color, stations in metro_stations.items() for station in stations]
 
 async def random_station(callback_query: types.CallbackQuery):
     await callback_query.message.answer("Выберите ветку метро:", reply_markup=metro_menu)
@@ -18,10 +18,11 @@ async def random_station(callback_query: types.CallbackQuery):
 async def station_selected(callback_query: types.CallbackQuery):
     color = callback_query.data.split('_')[1]
     if color == "all":
-        station = random.choice(all_stations)
+        station, station_color = random.choice(all_stations)
     else:
         station = random.choice(metro_stations[color])
-    await callback_query.message.answer(f"Случайная станция: {station}")
+        station_color = color
+    await callback_query.message.answer(f"Случайная станция: {station} {station_color}")
     await callback_query.message.answer("Выберите опцию:", reply_markup=main_menu)
 
 def register_handlers_random_station(dp: Dispatcher):
