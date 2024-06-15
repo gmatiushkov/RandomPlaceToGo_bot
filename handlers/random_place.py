@@ -134,7 +134,7 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
             await callback_query.message.delete()
             await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
         else:
-            new_text = "В радиусе нет зелёных зон❗\нВыберите тип места:"
+            new_text = "В радиусе нет зелёных зон❗\nВыберите тип места:"
             try:
                 await edit_message_text(
                     callback_query.bot,
@@ -146,7 +146,7 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
             except MessageToEditNotFound:
                 pass
     else:
-        new_text = "В радиусе нет зелёных зон❗\нВыберите тип места:"
+        new_text = "В радиусе нет зелёных зон❗\nВыберите тип места:"
         try:
             await edit_message_text(
                 callback_query.bot,
@@ -186,7 +186,7 @@ async def water_place_type(callback_query: types.CallbackQuery, state: FSMContex
             await callback_query.message.delete()
             await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
         else:
-            new_text = "В радиусе нет воды❗\нВыберите тип места:"
+            new_text = "В радиусе нет воды❗\nВыберите тип места:"
             try:
                 await edit_message_text(
                     callback_query.bot,
@@ -198,7 +198,7 @@ async def water_place_type(callback_query: types.CallbackQuery, state: FSMContex
             except MessageToEditNotFound:
                 pass
     else:
-        new_text = "В радиусе нет воды❗\нВыберите тип места:"
+        new_text = "В радиусе нет воды❗\nВыберите тип места:"
         try:
             await edit_message_text(
                 callback_query.bot,
