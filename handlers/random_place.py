@@ -13,6 +13,7 @@ class RandomPlace(StatesGroup):
     waiting_for_location = State()
     waiting_for_radius = State()
     choosing_place_type = State()
+    generating = State()  # Новое состояние для блокировки повторных запросов
 
 async def random_place(callback_query: types.CallbackQuery, state: FSMContext):
     message = await callback_query.message.edit_text("Отправьте начальную геопозицию.")
@@ -97,6 +98,9 @@ async def handle_invalid_message(message: types.Message, state: FSMContext):
     await message.delete()
 
 async def random_place_type(callback_query: types.CallbackQuery, state: FSMContext):
+    # Устанавливаем состояние генерации
+    await RandomPlace.generating.set()
+
     user_data = await state.get_data()
     location = user_data['location']
     radius = user_data['radius']
@@ -106,7 +110,13 @@ async def random_place_type(callback_query: types.CallbackQuery, state: FSMConte
     await callback_query.message.delete()
     await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
 
+    # Возвращаемся к выбору типа места
+    await RandomPlace.choosing_place_type.set()
+
 async def green_place_type(callback_query: types.CallbackQuery, state: FSMContext):
+    # Устанавливаем состояние генерации
+    await RandomPlace.generating.set()
+
     user_data = await state.get_data()
     location = user_data['location']
     radius = user_data['radius']
@@ -123,6 +133,7 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
             )
         except MessageToEditNotFound:
             pass
+        await RandomPlace.choosing_place_type.set()  # Возвращаемся к выбору типа места
         return
 
     green_areas = get_green_areas(location.latitude, location.longitude, radius)
@@ -146,7 +157,7 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
             except MessageToEditNotFound:
                 pass
     else:
-        new_text = "В радиусе нет зелёных зон❗\nВыберите тип места:"
+        new_text = "В радиусе нет зелёных зон❗\нВыберите тип места:"
         try:
             await edit_message_text(
                 callback_query.bot,
@@ -158,7 +169,13 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
         except MessageToEditNotFound:
             pass
 
+    # Возвращаемся к выбору типа места
+    await RandomPlace.choosing_place_type.set()
+
 async def water_place_type(callback_query: types.CallbackQuery, state: FSMContext):
+    # Устанавливаем состояние генерации
+    await RandomPlace.generating.set()
+
     user_data = await state.get_data()
     location = user_data['location']
     radius = user_data['radius']
@@ -175,6 +192,7 @@ async def water_place_type(callback_query: types.CallbackQuery, state: FSMContex
             )
         except MessageToEditNotFound:
             pass
+        await RandomPlace.choosing_place_type.set()  # Возвращаемся к выбору типа места
         return
 
     water_areas = get_water_areas(location.latitude, location.longitude, radius)
@@ -186,7 +204,7 @@ async def water_place_type(callback_query: types.CallbackQuery, state: FSMContex
             await callback_query.message.delete()
             await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
         else:
-            new_text = "В радиусе нет воды❗\nВыберите тип места:"
+            new_text = "В радиусе нет воды❗\нВыберите тип места:"
             try:
                 await edit_message_text(
                     callback_query.bot,
@@ -198,7 +216,7 @@ async def water_place_type(callback_query: types.CallbackQuery, state: FSMContex
             except MessageToEditNotFound:
                 pass
     else:
-        new_text = "В радиусе нет воды❗\nВыберите тип места:"
+        new_text = "В радиусе нет воды❗\нВыберите тип места:"
         try:
             await edit_message_text(
                 callback_query.bot,
@@ -209,6 +227,9 @@ async def water_place_type(callback_query: types.CallbackQuery, state: FSMContex
             )
         except MessageToEditNotFound:
             pass
+
+    # Возвращаемся к выбору типа места
+    await RandomPlace.choosing_place_type.set()
 
 async def change_radius(callback_query: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
