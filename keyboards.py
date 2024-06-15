@@ -22,5 +22,6 @@ metro_menu.add(InlineKeyboardButton("⬅️ Назад", callback_data="back_to_
 place_type_menu = InlineKeyboardMarkup(row_width=1)
 btn_random_place = InlineKeyboardButton("Случайное", callback_data="random_place_type")
 btn_green_place = InlineKeyboardButton("С растительностью 🌿", callback_data="green_place_type")
+btn_water_place = InlineKeyboardButton("У воды 🌊", callback_data="water_place_type")
 btn_back = InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")
-place_type_menu.add(btn_random_place, btn_green_place, btn_back)
+place_type_menu.add(btn_random_place, btn_green_place, btn_water_place, btn_back)

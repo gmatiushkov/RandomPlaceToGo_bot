@@ -2,12 +2,12 @@ from aiogram import types, Dispatcher
 from aiogram.types import ContentType
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.utils.exceptions import MessageNotModified
 import random
 from math import cos, sin, sqrt, pi
 import overpy
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon, Point, LineString
 from keyboards import main_menu, place_type_menu
-from aiogram.utils.exceptions import MessageNotModified
 
 class RandomPlace(StatesGroup):
     waiting_for_location = State()
@@ -76,9 +76,8 @@ async def random_place_type(callback_query: types.CallbackQuery, state: FSMConte
     random_point = get_random_point(location.latitude, location.longitude, radius)
 
     await callback_query.message.answer_location(random_point['lat'], random_point['lon'])
-    await callback_query.message.answer("Что сгенерировать? 🌀", reply_markup=main_menu)
     await callback_query.message.delete()
-    await state.finish()
+    await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
 
 async def green_place_type(callback_query: types.CallbackQuery, state: FSMContext):
     user_data = await state.get_data()
@@ -90,11 +89,10 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
         random_point = get_random_point_in_green_areas(green_areas)
         if random_point:
             await callback_query.message.answer_location(random_point['lat'], random_point['lon'])
-            await callback_query.message.answer("Что сгенерировать? 🌀", reply_markup=main_menu)
             await callback_query.message.delete()
-            await state.finish()
+            await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
         else:
-            new_text = "В радиусе нет зелёных зон ❗️\nВыберите тип места:"
+            new_text = "В радиусе нет зелёных зон❗️\nВыберите тип места:"
             await edit_message_text(
                 callback_query.bot,
                 chat_id=callback_query.message.chat.id,
@@ -103,7 +101,38 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
                 reply_markup=place_type_menu
             )
     else:
-        new_text = "В радиусе нет зелёных зон ❗️\nВыберите тип места:"
+        new_text = "В радиусе нет зелёных зон❗️\nВыберите тип места:"
+        await edit_message_text(
+            callback_query.bot,
+            chat_id=callback_query.message.chat.id,
+            message_id=callback_query.message.message_id,
+            new_text=new_text,
+            reply_markup=place_type_menu
+        )
+
+async def water_place_type(callback_query: types.CallbackQuery, state: FSMContext):
+    user_data = await state.get_data()
+    location = user_data['location']
+    radius = user_data['radius']
+    water_areas = get_water_areas(location.latitude, location.longitude, radius)
+
+    if water_areas:
+        random_point = get_random_point_on_water_boundary(water_areas)
+        if random_point:
+            await callback_query.message.answer_location(random_point['lat'], random_point['lon'])
+            await callback_query.message.delete()
+            await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
+        else:
+            new_text = "В радиусе нет воды❗️\nВыберите тип места:"
+            await edit_message_text(
+                callback_query.bot,
+                chat_id=callback_query.message.chat.id,
+                message_id=callback_query.message.message_id,
+                new_text=new_text,
+                reply_markup=place_type_menu
+            )
+    else:
+        new_text = "В радиусе нет воды❗️\nВыберите тип места:"
         await edit_message_text(
             callback_query.bot,
             chat_id=callback_query.message.chat.id,
@@ -146,10 +175,47 @@ def get_green_areas(lat, lon, radius):
     green_areas = []
     for way in result.ways:
         nodes = way.get_nodes(resolve_missing=True)
-        polygon = Polygon([(node.lon, node.lat) for node in nodes])
-        green_areas.append(polygon)
+        if len(nodes) >= 4:
+            polygon = Polygon([(node.lon, node.lat) for node in nodes])
+            green_areas.append(polygon)
 
     return green_areas
+
+def get_water_areas(lat, lon, radius):
+    api = overpy.Overpass()
+    r = radius / 111300  # Convert radius to degrees
+    query = f"""
+    [out:json];
+    (
+        way["natural"="water"](around:{radius},{lat},{lon});
+        way["waterway"="riverbank"](around:{radius},{lat},{lon});
+        way["water"="lake"](around:{radius},{lat},{lon});
+        way["water"="pond"](around:{radius},{lat},{lon});
+        way["water"="reservoir"](around:{radius},{lat},{lon});
+        way["waterway"="river"](around:{radius},{lat},{lon});
+        way["waterway"="stream"](around:{radius},{lat},{lon});
+        way["waterway"="canal"](around:{radius},{lat},{lon});
+        way["waterway"="ditch"](around:{radius},{lat},{lon});
+        way["waterway"="drain"](around:{radius},{lat},{lon});
+        way["natural"="coastline"](around:{radius},{lat},{lon});
+        way["natural"="bay"](around:{radius},{lat},{lon});
+        way["water"="lagoon"](around:{radius},{lat},{lon});
+        way["water"="oxbow"](around:{radius},{lat},{lon});
+        way["waterway"="dam"](around:{radius},{lat},{lon});
+    );
+    (._;>;);
+    out body;
+    """
+    result = api.query(query)
+
+    water_areas = []
+    for way in result.ways:
+        nodes = way.get_nodes(resolve_missing=True)
+        if len(nodes) >= 4:
+            polygon = Polygon([(node.lon, node.lat) for node in nodes])
+            water_areas.append(polygon)
+
+    return water_areas
 
 def get_random_point(lat, lon, radius):
     r = radius / 111300  # Convert radius to degrees
@@ -173,10 +239,19 @@ def get_random_point_in_green_areas(green_areas):
                 return {"lat": random_point.y, "lon": random_point.x}
     return None
 
+def get_random_point_on_water_boundary(water_areas):
+    for _ in range(10):  # Попытка 10 раз
+        polygon = random.choice(water_areas)
+        boundary = LineString(polygon.exterior.coords)
+        random_point = boundary.interpolate(random.uniform(0, boundary.length))
+        return {"lat": random_point.y, "lon": random_point.x}
+    return None
+
 def register_handlers_random_place(dp: Dispatcher):
     dp.register_callback_query_handler(random_place, lambda c: c.data == 'random_place')
     dp.register_message_handler(location_received, content_types=ContentType.ANY, state=RandomPlace.waiting_for_location)
     dp.register_message_handler(radius_received, content_types=ContentType.TEXT, state=RandomPlace.waiting_for_radius)
     dp.register_callback_query_handler(random_place_type, lambda c: c.data == 'random_place_type', state=RandomPlace.choosing_place_type)
     dp.register_callback_query_handler(green_place_type, lambda c: c.data == 'green_place_type', state=RandomPlace.choosing_place_type)
+    dp.register_callback_query_handler(water_place_type, lambda c: c.data == 'water_place_type', state=RandomPlace.choosing_place_type)
     dp.register_callback_query_handler(back_to_main_menu, lambda c: c.data == 'back_to_menu', state='*')
