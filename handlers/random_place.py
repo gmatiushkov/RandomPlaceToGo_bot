@@ -2,7 +2,7 @@ from aiogram import types, Dispatcher
 from aiogram.types import ContentType
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.utils.exceptions import MessageNotModified
+from aiogram.utils.exceptions import MessageNotModified, MessageToEditNotFound, MessageToDeleteNotFound
 import random
 from math import cos, sin, sqrt, pi
 import overpy
@@ -21,11 +21,23 @@ async def random_place(callback_query: types.CallbackQuery, state: FSMContext):
 
 async def location_received(message: types.Message, state: FSMContext):
     if message.content_type == ContentType.LOCATION:
+        user_data = await state.get_data()
+        if 'query_message_id' in user_data:
+            try:
+                await message.bot.delete_message(chat_id=message.chat.id, message_id=user_data['query_message_id'])
+            except MessageToDeleteNotFound:
+                pass
         await state.update_data(location=message.location)
-        response_message = await message.answer("Введите радиус в метрах:")
-        await state.update_data(radius_message_id=response_message.message_id)
-        await state.update_data(location_message_id=message.message_id)
-        await RandomPlace.waiting_for_radius.set()
+        if 'radius' in user_data:
+            await message.answer("Выберите тип места:", reply_markup=place_type_menu)
+            await message.delete()
+            await state.update_data(location_message_id=message.message_id)
+            await RandomPlace.choosing_place_type.set()
+        else:
+            response_message = await message.answer("Введите радиус в метрах:")
+            await state.update_data(radius_message_id=response_message.message_id)
+            await state.update_data(location_message_id=message.message_id)
+            await RandomPlace.waiting_for_radius.set()
     else:
         await message.delete()
         data = await state.get_data()
@@ -52,9 +64,18 @@ async def radius_received(message: types.Message, state: FSMContext):
         await message.answer("Выберите тип места:", reply_markup=place_type_menu)
         await message.delete()
         user_data = await state.get_data()
-        await message.bot.delete_message(chat_id=message.chat.id, message_id=user_data['query_message_id'])
-        await message.bot.delete_message(chat_id=message.chat.id, message_id=user_data['radius_message_id'])
-        await message.bot.delete_message(chat_id=message.chat.id, message_id=user_data['location_message_id'])
+        try:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=user_data['query_message_id'])
+        except MessageToDeleteNotFound:
+            pass
+        try:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=user_data['radius_message_id'])
+        except MessageToDeleteNotFound:
+            pass
+        try:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=user_data['location_message_id'])
+        except MessageToDeleteNotFound:
+            pass
         await RandomPlace.choosing_place_type.set()
     except ValueError:
         await message.delete()
@@ -62,12 +83,18 @@ async def radius_received(message: types.Message, state: FSMContext):
         radius_message_id = data.get('radius_message_id')
         if radius_message_id:
             new_text = "Радиус должен быть положительным числом❗️\nВведите радиус в метрах:"
-            await edit_message_text(
-                message.bot,
-                chat_id=message.chat.id,
-                message_id=radius_message_id,
-                new_text=new_text
-            )
+            try:
+                await edit_message_text(
+                    message.bot,
+                    chat_id=message.chat.id,
+                    message_id=radius_message_id,
+                    new_text=new_text
+                )
+            except MessageToEditNotFound:
+                pass
+
+async def handle_invalid_message(message: types.Message, state: FSMContext):
+    await message.delete()
 
 async def random_place_type(callback_query: types.CallbackQuery, state: FSMContext):
     user_data = await state.get_data()
@@ -83,6 +110,21 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
     user_data = await state.get_data()
     location = user_data['location']
     radius = user_data['radius']
+
+    if radius > 10000:
+        new_text = "Для генерации зелёных мест радиус должен быть не больше 10000❗️\nВыберите тип места:"
+        try:
+            await edit_message_text(
+                callback_query.bot,
+                chat_id=callback_query.message.chat.id,
+                message_id=callback_query.message.message_id,
+                new_text=new_text,
+                reply_markup=place_type_menu
+            )
+        except MessageToEditNotFound:
+            pass
+        return
+
     green_areas = get_green_areas(location.latitude, location.longitude, radius)
 
     if green_areas:
@@ -92,7 +134,20 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
             await callback_query.message.delete()
             await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
         else:
-            new_text = "В радиусе нет зелёных зон❗️\nВыберите тип места:"
+            new_text = "В радиусе нет зелёных зон❗\нВыберите тип места:"
+            try:
+                await edit_message_text(
+                    callback_query.bot,
+                    chat_id=callback_query.message.chat.id,
+                    message_id=callback_query.message.message_id,
+                    new_text=new_text,
+                    reply_markup=place_type_menu
+                )
+            except MessageToEditNotFound:
+                pass
+    else:
+        new_text = "В радиусе нет зелёных зон❗\нВыберите тип места:"
+        try:
             await edit_message_text(
                 callback_query.bot,
                 chat_id=callback_query.message.chat.id,
@@ -100,20 +155,28 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
                 new_text=new_text,
                 reply_markup=place_type_menu
             )
-    else:
-        new_text = "В радиусе нет зелёных зон❗️\nВыберите тип места:"
-        await edit_message_text(
-            callback_query.bot,
-            chat_id=callback_query.message.chat.id,
-            message_id=callback_query.message.message_id,
-            new_text=new_text,
-            reply_markup=place_type_menu
-        )
+        except MessageToEditNotFound:
+            pass
 
 async def water_place_type(callback_query: types.CallbackQuery, state: FSMContext):
     user_data = await state.get_data()
     location = user_data['location']
     radius = user_data['radius']
+
+    if radius > 10000:
+        new_text = "Для генерации мест у воды радиус должен быть не больше 10000❗️\nВыберите тип места:"
+        try:
+            await edit_message_text(
+                callback_query.bot,
+                chat_id=callback_query.message.chat.id,
+                message_id=callback_query.message.message_id,
+                new_text=new_text,
+                reply_markup=place_type_menu
+            )
+        except MessageToEditNotFound:
+            pass
+        return
+
     water_areas = get_water_areas(location.latitude, location.longitude, radius)
 
     if water_areas:
@@ -123,7 +186,20 @@ async def water_place_type(callback_query: types.CallbackQuery, state: FSMContex
             await callback_query.message.delete()
             await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
         else:
-            new_text = "В радиусе нет воды❗️\nВыберите тип места:"
+            new_text = "В радиусе нет воды❗\нВыберите тип места:"
+            try:
+                await edit_message_text(
+                    callback_query.bot,
+                    chat_id=callback_query.message.chat.id,
+                    message_id=callback_query.message.message_id,
+                    new_text=new_text,
+                    reply_markup=place_type_menu
+                )
+            except MessageToEditNotFound:
+                pass
+    else:
+        new_text = "В радиусе нет воды❗\нВыберите тип места:"
+        try:
             await edit_message_text(
                 callback_query.bot,
                 chat_id=callback_query.message.chat.id,
@@ -131,18 +207,31 @@ async def water_place_type(callback_query: types.CallbackQuery, state: FSMContex
                 new_text=new_text,
                 reply_markup=place_type_menu
             )
-    else:
-        new_text = "В радиусе нет воды❗️\nВыберите тип места:"
-        await edit_message_text(
-            callback_query.bot,
-            chat_id=callback_query.message.chat.id,
-            message_id=callback_query.message.message_id,
-            new_text=new_text,
-            reply_markup=place_type_menu
-        )
+        except MessageToEditNotFound:
+            pass
+
+async def change_radius(callback_query: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    try:
+        await callback_query.message.delete()
+    except MessageToDeleteNotFound:
+        pass
+    message = await callback_query.message.answer("Введите новый радиус в метрах:")
+    await state.update_data(radius_message_id=message.message_id)
+    await RandomPlace.waiting_for_radius.set()
+
+async def change_location(callback_query: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    try:
+        await callback_query.message.delete()
+    except MessageToDeleteNotFound:
+        pass
+    message = await callback_query.message.answer("Отправьте новую начальную геопозицию.")
+    await state.update_data(query_message_id=message.message_id, query_message_text=message.text)
+    await RandomPlace.waiting_for_location.set()
 
 async def back_to_main_menu(callback_query: types.CallbackQuery, state: FSMContext):
-    await callback_query.message.edit_text("Выберите опцию:", reply_markup=main_menu)
+    await callback_query.message.edit_text("Что сгенерировать? 🌀", reply_markup=main_menu)
     await state.finish()
 
 async def edit_message_text(bot, chat_id, message_id, new_text, reply_markup=None):
@@ -153,7 +242,7 @@ async def edit_message_text(bot, chat_id, message_id, new_text, reply_markup=Non
             message_id=message_id,
             reply_markup=reply_markup
         )
-    except MessageNotModified:
+    except (MessageNotModified, MessageToEditNotFound):
         pass
 
 def get_green_areas(lat, lon, radius):
@@ -251,7 +340,11 @@ def register_handlers_random_place(dp: Dispatcher):
     dp.register_callback_query_handler(random_place, lambda c: c.data == 'random_place')
     dp.register_message_handler(location_received, content_types=ContentType.ANY, state=RandomPlace.waiting_for_location)
     dp.register_message_handler(radius_received, content_types=ContentType.TEXT, state=RandomPlace.waiting_for_radius)
+    dp.register_message_handler(handle_invalid_message, content_types=ContentType.ANY, state=RandomPlace.waiting_for_radius)
+    dp.register_message_handler(handle_invalid_message, content_types=ContentType.ANY, state=RandomPlace.choosing_place_type)
     dp.register_callback_query_handler(random_place_type, lambda c: c.data == 'random_place_type', state=RandomPlace.choosing_place_type)
     dp.register_callback_query_handler(green_place_type, lambda c: c.data == 'green_place_type', state=RandomPlace.choosing_place_type)
     dp.register_callback_query_handler(water_place_type, lambda c: c.data == 'water_place_type', state=RandomPlace.choosing_place_type)
+    dp.register_callback_query_handler(change_radius, lambda c: c.data == 'change_radius', state=RandomPlace.choosing_place_type)
+    dp.register_callback_query_handler(change_location, lambda c: c.data == 'change_location', state=RandomPlace.choosing_place_type)
     dp.register_callback_query_handler(back_to_main_menu, lambda c: c.data == 'back_to_menu', state='*')
