@@ -157,7 +157,7 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
             except MessageToEditNotFound:
                 pass
     else:
-        new_text = "В радиусе нет зелёных зон❗\нВыберите тип места:"
+        new_text = "В радиусе нет зелёных зон❗\nВыберите тип места:"
         try:
             await edit_message_text(
                 callback_query.bot,
@@ -171,6 +171,94 @@ async def green_place_type(callback_query: types.CallbackQuery, state: FSMContex
 
     # Возвращаемся к выбору типа места
     await RandomPlace.choosing_place_type.set()
+
+
+def calculate_threshold_area(areas, percentage=0.05):
+    areas_sorted = sorted(areas)
+    index = int(len(areas_sorted) * (1 - percentage))
+    if index < 0 or index >= len(areas_sorted):
+        return None  # Если не удается вычислить порог
+    # print(areas_sorted)
+    return areas_sorted[index]
+
+async def large_green_place_type(callback_query: types.CallbackQuery, state: FSMContext):
+    await RandomPlace.generating.set()
+
+    user_data = await state.get_data()
+    location = user_data['location']
+    radius = user_data['radius']
+
+    if radius > 10000:
+        new_text = "Для генерации больших зелёных мест радиус должен быть не больше 10000❗️\nВыберите тип места:"
+        try:
+            await edit_message_text(
+                callback_query.bot,
+                chat_id=callback_query.message.chat.id,
+                message_id=callback_query.message.message_id,
+                new_text=new_text,
+                reply_markup=place_type_menu
+            )
+        except MessageToEditNotFound:
+            pass
+        await RandomPlace.choosing_place_type.set()
+        return
+
+    green_areas = get_green_areas(location.latitude, location.longitude, radius)
+    areas = [degrees_to_square_meters(area.area) for area in green_areas]
+
+    if not areas:
+        new_text = "В радиусе нет зелёных зон❗\nВыберите тип места:"
+        try:
+            await edit_message_text(
+                callback_query.bot,
+                chat_id=callback_query.message.chat.id,
+                message_id=callback_query.message.message_id,
+                new_text=new_text,
+                reply_markup=place_type_menu
+            )
+        except MessageToEditNotFound:
+            pass
+        await RandomPlace.choosing_place_type.set()
+        return
+
+    threshold_area = calculate_threshold_area(areas, percentage=0.3)
+    # print(threshold_area)
+
+    large_green_areas = [area for area in green_areas if degrees_to_square_meters(area.area) > threshold_area]
+
+    if large_green_areas:
+        random_point = get_random_point_in_green_areas(large_green_areas)
+        if random_point:
+            await callback_query.message.answer_location(random_point['lat'], random_point['lon'])
+            await callback_query.message.delete()
+            await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
+        else:
+            new_text = "В радиусе нет больших зелёных зон❗\nВыберите тип места:"
+            try:
+                await edit_message_text(
+                    callback_query.bot,
+                    chat_id=callback_query.message.chat.id,
+                    message_id=callback_query.message.message_id,
+                    new_text=new_text,
+                    reply_markup=place_type_menu
+                )
+            except MessageToEditNotFound:
+                pass
+    else:
+        new_text = "В радиусе нет больших зелёных зон❗\nВыберите тип места:"
+        try:
+            await edit_message_text(
+                callback_query.bot,
+                chat_id=callback_query.message.chat.id,
+                message_id=callback_query.message.message_id,
+                new_text=new_text,
+                reply_markup=place_type_menu
+            )
+        except MessageToEditNotFound:
+            pass
+
+    await RandomPlace.choosing_place_type.set()
+
 
 async def water_place_type(callback_query: types.CallbackQuery, state: FSMContext):
     # Устанавливаем состояние генерации
@@ -204,7 +292,7 @@ async def water_place_type(callback_query: types.CallbackQuery, state: FSMContex
             await callback_query.message.delete()
             await callback_query.message.answer("Выберите тип места:", reply_markup=place_type_menu)
         else:
-            new_text = "В радиусе нет воды❗\нВыберите тип места:"
+            new_text = "В радиусе нет воды❗\nВыберите тип места:"
             try:
                 await edit_message_text(
                     callback_query.bot,
@@ -216,7 +304,7 @@ async def water_place_type(callback_query: types.CallbackQuery, state: FSMContex
             except MessageToEditNotFound:
                 pass
     else:
-        new_text = "В радиусе нет воды❗\нВыберите тип места:"
+        new_text = "В радиусе нет воды❗\nВыберите тип места:"
         try:
             await edit_message_text(
                 callback_query.bot,
@@ -291,6 +379,12 @@ def get_green_areas(lat, lon, radius):
 
     return green_areas
 
+def degrees_to_square_meters(area_in_degrees):
+    meters_per_degree = 111139  # это зависит от широты, точная константа для экватора
+    area_in_square_meters = area_in_degrees * (meters_per_degree ** 2)
+    return area_in_square_meters
+
+
 def get_water_areas(lat, lon, radius):
     api = overpy.Overpass()
     r = radius / 111300  # Convert radius to degrees
@@ -363,6 +457,7 @@ def register_handlers_random_place(dp: Dispatcher):
     dp.register_message_handler(handle_invalid_message, content_types=ContentType.ANY, state=RandomPlace.choosing_place_type)
     dp.register_callback_query_handler(random_place_type, lambda c: c.data == 'random_place_type', state=RandomPlace.choosing_place_type)
     dp.register_callback_query_handler(green_place_type, lambda c: c.data == 'green_place_type', state=RandomPlace.choosing_place_type)
+    dp.register_callback_query_handler(large_green_place_type, lambda c: c.data == 'large_green_place_type', state=RandomPlace.choosing_place_type)  # Новый хендлер
     dp.register_callback_query_handler(water_place_type, lambda c: c.data == 'water_place_type', state=RandomPlace.choosing_place_type)
     dp.register_callback_query_handler(change_radius, lambda c: c.data == 'change_radius', state=RandomPlace.choosing_place_type)
     dp.register_callback_query_handler(change_location, lambda c: c.data == 'change_location', state=RandomPlace.choosing_place_type)
