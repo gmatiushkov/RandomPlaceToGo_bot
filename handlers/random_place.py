@@ -305,8 +305,6 @@ def get_water_areas(lat, lon, radius):
         way["waterway"="river"](around:{radius},{lat},{lon});
         way["waterway"="stream"](around:{radius},{lat},{lon});
         way["waterway"="canal"](around:{radius},{lat},{lon});
-        way["waterway"="ditch"](around:{radius},{lat},{lon});
-        way["waterway"="drain"](around:{radius},{lat},{lon});
         way["natural"="coastline"](around:{radius},{lat},{lon});
         way["natural"="bay"](around:{radius},{lat},{lon});
         way["water"="lagoon"](around:{radius},{lat},{lon});
