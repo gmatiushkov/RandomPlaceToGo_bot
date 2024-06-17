@@ -404,6 +404,10 @@ def get_water_areas(lat, lon, radius):
         way["water"="lagoon"](around:{radius},{lat},{lon});
         way["water"="oxbow"](around:{radius},{lat},{lon});
         way["waterway"="dam"](around:{radius},{lat},{lon});
+        relation["natural"="water"](around:{radius},{lat},{lon});
+        relation["water"="lake"](around:{radius},{lat},{lon});
+        relation["water"="pond"](around:{radius},{lat},{lon});
+        relation["waterway"="river"](around:{radius},{lat},{lon});
     );
     (._;>;);
     out body;
